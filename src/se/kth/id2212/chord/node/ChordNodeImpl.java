@@ -26,8 +26,8 @@ public class ChordNodeImpl extends UnicastRemoteObject implements IChordNode {
     // the hash table of this node
     Map<String, String> hashTable = new HashMap<String, String>();
 
-    // the length of successors list (r should be log(N))
-    private static final int r = 3;
+    // the length of successors list (r should be O(log(N)))
+    private static final int r = KeyImpl.KEY_LENGTH;
 
     // static int port = 12345;
     private boolean isActive;
