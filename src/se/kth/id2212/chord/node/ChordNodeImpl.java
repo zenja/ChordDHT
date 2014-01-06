@@ -5,7 +5,10 @@ import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -19,6 +22,9 @@ import se.kth.id2212.chord.dht.KeyImpl;
 public class ChordNodeImpl extends UnicastRemoteObject implements IChordNode {
 
     private static final long serialVersionUID = 7356823435790024489L;
+
+    // the hash table of this node
+    Map<String, String> hashTable = new HashMap<String, String>();
 
     // the length of successors list (r should be log(N))
     private static final int r = 3;
@@ -113,10 +119,10 @@ public class ChordNodeImpl extends UnicastRemoteObject implements IChordNode {
             }
         };
 
-        scheduler.scheduleAtFixedRate(stabalizer, 5, 5, TimeUnit.SECONDS);
-        scheduler.scheduleAtFixedRate(fingerFixer, 10, 10, TimeUnit.SECONDS);
-        scheduler.scheduleAtFixedRate(predecessorChecker, 10, 10, TimeUnit.SECONDS);
-        scheduler.scheduleAtFixedRate(successorListUpdator, 15, 30, TimeUnit.SECONDS);
+        scheduler.scheduleAtFixedRate(stabalizer, 1, 1, TimeUnit.SECONDS);
+        scheduler.scheduleAtFixedRate(fingerFixer, 1, 1, TimeUnit.SECONDS);
+        scheduler.scheduleAtFixedRate(predecessorChecker, 1, 1, TimeUnit.SECONDS);
+        scheduler.scheduleAtFixedRate(successorListUpdator, 1, 1, TimeUnit.SECONDS);
     }
 
     @Override
@@ -204,13 +210,28 @@ public class ChordNodeImpl extends UnicastRemoteObject implements IChordNode {
     }
 
     @Override
-    public void put(IKey id, String value) throws RemoteException {
-        throw new UnsupportedOperationException("Not supported yet.");
+    public void put(String key, String value) throws RemoteException {
+        try {
+            IKey id = HashUtil.hash(key.getBytes(), HashUtil.SHA_ALGO, KeyImpl.KEY_MAX);
+            IChordNode nodeToStore = findSuccessor(id);
+            nodeToStore.store(key, value);
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+            System.exit(-1);
+        }
     }
 
     @Override
-    public String get(IKey id) throws RemoteException {
-        throw new UnsupportedOperationException("Not supported yet.");
+    public String get(String key) throws RemoteException {
+        IChordNode nodeToFetch = null;
+        try {
+            IKey id = HashUtil.hash(key.getBytes(), HashUtil.SHA_ALGO, KeyImpl.KEY_MAX);
+            nodeToFetch = findSuccessor(id);
+            return nodeToFetch.retrieve(key);
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+            return null;
+        }
     }
 
     /*
@@ -226,8 +247,43 @@ public class ChordNodeImpl extends UnicastRemoteObject implements IChordNode {
      */
     @Override
     public void notify(IChordNode node) throws RemoteException {
+        notify(node, false);
+    }
+
+    @Override
+    public void notify(IChordNode notifyingNode, boolean isNewNode) throws RemoteException {
+        // if is new node, we may need to transfer key - value pairs to the new node
+        // now the state is:
+        // predecessor  ------> this <-|
+        //    ^                  |     |
+        //    |-------------------     |
+        //                             |
+        //            new node ---------
+        if (isNewNode) {
+            // transfer some key-value pairs to the new predecessor
+            // whose id in (predecessor.predecessor, predecessor]
+            Iterator<Map.Entry<String, String>> entryIterator = hashTable.entrySet().iterator();
+            while (entryIterator.hasNext()) {
+                Map.Entry<String, String> entry = entryIterator.next();
+                String key = entry.getKey();
+                String value = entry.getValue();
+                IKey id = null;
+                try {
+                    id = HashUtil.hash(key.getBytes(), HashUtil.SHA_ALGO, KeyImpl.KEY_MAX);
+                } catch (NoSuchAlgorithmException e) {
+                    // Do nothing
+                    e.printStackTrace();
+                }
+                // if id(key) in (predecessor, new node], transfer the key/value pair to new node
+                if (id.isBetween(predecessor.getId(), notifyingNode.getId())) {
+                    notifyingNode.store(key, value);
+                    entryIterator.remove();
+                }
+            }
+        }
+
         // the id of the node that notifies FROM (not to!)
-        IKey nodeId = node.getId();
+        IKey nodeId = notifyingNode.getId();
 
         // set predecessor to null if it is not alive
         checkPredecessor();
@@ -235,7 +291,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements IChordNode {
         if (predecessor == null || nodeId.isBetween(predecessor.getId(), getId())) {
             System.out.println("now " + nodeId.toDecString() + " => " + getId().toDecString());
 
-            predecessor = node;
+            predecessor = notifyingNode;
             this.printInfo();
         }
     }
@@ -254,7 +310,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements IChordNode {
     // Make knownPeer to find the successor of the node
     private void joinGroup(IChordNode knownPeer) throws RemoteException {
         setSuccessor(knownPeer.findSuccessor(chordId));
-        getSuccessor().notify(this);
+        getSuccessor().notify(this, true);
         updateSuccessorList(getSuccessor().getSuccessorList());
     }
 
@@ -264,6 +320,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements IChordNode {
         this.setIsActive(false);
         this.predecessor = null;
         this.successorList.clear();
+        this.hashTable.clear();
         scheduler.shutdown();
     }
 
@@ -412,6 +469,44 @@ public class ChordNodeImpl extends UnicastRemoteObject implements IChordNode {
 
         // there is no live successor in the successor list
         return false;
+    }
+
+    @Override
+    public String getRmiUrl() throws RemoteException {
+        return rmiURL;
+    }
+
+    @Override
+    public IChordNode[] getFingers() throws RemoteException {
+        return fingers;
+    }
+
+    /**
+     * Remove this node
+     */
+    @Override
+    public void remove() throws RemoteException {
+        // transfer key-value pairs to its successor
+        for (Map.Entry<String, String> entry : hashTable.entrySet()) {
+            getSuccessor().store(entry.getKey(), entry.getValue());
+        }
+        // leave the group
+        leaveGroup();
+    }
+
+    @Override
+    public void store(String key, String value) throws RemoteException {
+        hashTable.put(key, value);
+    }
+
+    @Override
+    public String retrieve(String key) throws RemoteException {
+        return hashTable.get(key);
+    }
+
+    @Override
+    public Map<String, String> getLocalHashTable() throws RemoteException {
+        return hashTable;
     }
 
 }

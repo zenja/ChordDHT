@@ -10,7 +10,7 @@ public class KeyImpl implements IKey, Serializable {
     public static int KEY_LENGTH = 5;
 
     // LOG_BASE is k: search arity
-    public static BigInteger LOG_BASE = new BigInteger("5");
+    public static BigInteger LOG_BASE = new BigInteger("2");
 
     // the maximum key is LOG_BASE ^ KEY_LENGTH
     public static BigInteger KEY_MAX = LOG_BASE.pow(KEY_LENGTH);
