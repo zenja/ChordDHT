@@ -102,7 +102,7 @@ public class ChordDHTDashboard extends JFrame {
         setResizable(false);
         setTitle("DHT Dashboard");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setBounds(100, 100, 480, 570);
+        setBounds(100, 100, 480, 600);
         contentPane = new JPanel();
         contentPane.setBorder(new EmptyBorder(5, 5, 5, 5));
         setContentPane(contentPane);
@@ -261,7 +261,7 @@ public class ChordDHTDashboard extends JFrame {
                 }
                 IChordNode node = ChordNodeLauncher.getLaunchedNodes().get(index);
                 try {
-                    node.remove();
+                    node.removeNode();
                     updateNodeList();
                 } catch (RemoteException e) {
                     e.printStackTrace();
@@ -431,6 +431,32 @@ public class ChordDHTDashboard extends JFrame {
         txtRmiUriContent.setBounds(103, 169, 353, 28);
         contentPane.add(txtRmiUriContent);
         txtRmiUriContent.setColumns(10);
+
+        JButton btnDelete = new JButton("Delete");
+        btnDelete.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                String key = textFieldKey.getText();
+                if (key.isEmpty()) {
+                    alertInfo("Invalid Input", "Key should not be null!");
+                    return;
+                }
+                try {
+                    ChordNodeLauncher.getFirstActiveNode().remove(key);
+                    alertInfo("Deleted!", "Deleted!");
+                } catch (RemoteException e) {
+                    e.printStackTrace();
+                    alertInfo("RemoteException",
+                            "ChordNodeLauncher.getFirstActiveNode().remove(key);");
+                } catch (NoActiveNodeException e) {
+                    e.printStackTrace();
+                    alertInfo("NoActiveNodeException",
+                            "ChordNodeLauncher.getFirstActiveNode().get(key);");
+                }
+            }
+        });
+        btnDelete.setBounds(73, 543, 99, 29);
+        contentPane.add(btnDelete);
     }
 
     public void updateNodeList() throws RemoteException {

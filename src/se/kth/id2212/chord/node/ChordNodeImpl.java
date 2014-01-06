@@ -234,6 +234,18 @@ public class ChordNodeImpl extends UnicastRemoteObject implements IChordNode {
         }
     }
 
+    @Override
+    public void remove(String key) throws RemoteException {
+        try {
+            IKey id = HashUtil.hash(key.getBytes(), HashUtil.SHA_ALGO, KeyImpl.KEY_MAX);
+            IChordNode nodeToDeleteFrom = findSuccessor(id);
+            nodeToDeleteFrom.removeKeyValuePair(key);
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+            System.exit(-1);
+        }
+    }
+
     /*
      * (non-Javadoc)
      * @see id2212.chord.node.IChordNode#notify(id2212.chord.node.IChordNode)
@@ -485,7 +497,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements IChordNode {
      * Remove this node
      */
     @Override
-    public void remove() throws RemoteException {
+    public void removeNode() throws RemoteException {
         // transfer key-value pairs to its successor
         for (Map.Entry<String, String> entry : hashTable.entrySet()) {
             getSuccessor().store(entry.getKey(), entry.getValue());
@@ -502,6 +514,11 @@ public class ChordNodeImpl extends UnicastRemoteObject implements IChordNode {
     @Override
     public String retrieve(String key) throws RemoteException {
         return hashTable.get(key);
+    }
+
+    @Override
+    public void removeKeyValuePair(String key) throws RemoteException {
+        hashTable.remove(key);
     }
 
     @Override

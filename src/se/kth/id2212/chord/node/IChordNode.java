@@ -14,6 +14,8 @@ public interface IChordNode extends Remote {
 
     public String get(String key) throws RemoteException;
 
+    public void remove(String key) throws RemoteException;
+
     public void notify(IChordNode node) throws RemoteException;
 
     public void notify(IChordNode node, boolean isNewNode) throws RemoteException;
@@ -29,13 +31,16 @@ public interface IChordNode extends Remote {
     public IKey getId() throws RemoteException;
 
     // remove the node
-    public void remove() throws RemoteException;
+    public void removeNode() throws RemoteException;
 
     // set the key-value pair in local hash table
     public void store(String key, String value) throws RemoteException;
 
     // get the key-value pair from local hash table
     public String retrieve(String key) throws RemoteException;
+
+    // remove the key/value pair from local hash table
+    public void removeKeyValuePair(String key) throws RemoteException;
 
     /* Interfaces below are used by GUI dashboard to get the internal info of the node */
 
